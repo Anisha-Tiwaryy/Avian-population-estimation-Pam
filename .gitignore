@@ -1,0 +1,7 @@
+data/
+results/*.parquet
+results/*.csv
+figures/*.png
+__pycache__/
+*.pyc
+.venv/
