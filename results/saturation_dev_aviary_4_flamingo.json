@@ -1,0 +1,42 @@
+{
+  "aviary": "dev_aviary_4",
+  "species": "flamingo",
+  "features": {
+    "peak_db": {
+      "saturation_K_raw": null,
+      "range_raw": 16.56965458393097,
+      "saturation_K_norm": null,
+      "range_norm": 3.470931053161621
+    },
+    "floor_db": {
+      "saturation_K_raw": null,
+      "range_raw": 26.478895902633667,
+      "saturation_K_norm": null,
+      "range_norm": 6.6257171630859375
+    },
+    "occupancy": {
+      "saturation_K_raw": null,
+      "range_raw": 0.6011904761904763,
+      "saturation_K_norm": null,
+      "range_norm": 0.6011904761904763
+    },
+    "flatness": {
+      "saturation_K_raw": 48,
+      "range_raw": 0.1256890445947647,
+      "saturation_K_norm": 48,
+      "range_norm": 0.12568925321102142
+    },
+    "n_peaks": {
+      "saturation_K_raw": null,
+      "range_raw": 0.5504329004328987,
+      "saturation_K_norm": null,
+      "range_norm": 0.5504329004328987
+    },
+    "onset_rate": {
+      "saturation_K_raw": 6,
+      "range_raw": 0.7440476190476186,
+      "saturation_K_norm": 6,
+      "range_norm": 0.7440476190476186
+    }
+  }
+}

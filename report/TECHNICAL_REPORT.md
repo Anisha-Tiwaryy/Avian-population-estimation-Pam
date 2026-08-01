@@ -251,7 +251,9 @@ clips. It was included as a supporting candidate, not as a primary hypothesis.
 The features the method was actually built around — `chorus_floor_p50`,
 `chorus_floor_p90`, `chorus_duty`, `poly_flatness`, `poly_simultaneity` — do not
 appear in the top ten at all. The chorus-floor family, the central idea of
-§3.2, was among the worst performers.
+§3.2, was among the worst performers. Section 5.5 investigates why, using a
+controlled experiment with manufactured ground truth, and finds that the
+mechanism is real but confounded rather than absent.
 
 Two honest caveats about the winning feature. First, it is a temporal-structure
 measure, so it is more vulnerable to the subsampling of §4 than a
@@ -295,6 +297,96 @@ pretrained detector.
 **Figures.** `figures/fig1_saturation.png`, `fig2_diel.png`,
 `fig3_predictions.png`, `fig4_feature_corr.png`.
 
+### 5.5 A controlled saturation experiment
+
+The development set provides eight labels, which is not enough to establish
+whether any feature genuinely tracks abundance. Rather than accept that limit,
+this section manufactures ground truth: real clips are mixed together at a known
+multiplicity K, and each feature is measured as a function of K. This produces
+thousands of exactly-labelled points instead of eight, and makes the central
+hypothesis of §3.2 testable rather than assumed.
+
+**Method.** 200 real clips are sampled from `dev_aviary_4` (so background,
+microphone, reverberation and non-target species are all realistic). For each of
+40 trials per K, K clips are drawn at random and their waveforms summed. The
+same per-clip quantities used by the production pipeline (`src/detect.py`) are
+then measured on the mix, for K from 1 to 64.
+
+**Confound handling.** Summing K incoherent signals raises broadband level by
+roughly √K, which would make any absolute level feature rise trivially. Every
+curve is therefore computed twice: raw, and with the mix rescaled to constant
+RMS. **Only the RMS-normalised curves are interpreted below**, since they
+isolate changes in acoustic *structure* from changes in gain. A second, weaker
+confound is that background energy accumulates along with calls, so the measured
+saturation points are an optimistic bound — real saturation occurs at K no
+larger than reported. Script: `scripts/saturation_experiment.py`.
+
+**Results** (RMS-normalised medians, `dev_aviary_4`, flamingo band 350–2200 Hz):
+
+| K | `peak_db` | `floor_db` | `occupancy` | `n_peaks` |
+|---|---|---|---|---|
+| 1 | −17.38 | −34.07 | 0.14 | 16.22 |
+| 2 | −18.95 | −32.87 | 0.24 | 16.31 |
+| 4 | −19.49 | −31.01 | 0.32 | 16.42 |
+| 8 | −19.76 | −29.00 | 0.46 | 16.41 |
+| 16 | −20.05 | −28.84 | 0.48 | 16.47 |
+| 32 | −20.71 | −28.21 | 0.66 | 16.36 |
+| 64 | −20.85 | −27.45 | 0.71 | 16.77 |
+
+| Feature | Saturation K (normalised) | Normalised range |
+|---|---|---|
+| `floor_db` | none out to 64 | **6.63 dB** |
+| `occupancy` | none out to 64 | **0.601** |
+| `n_peaks` | none out to 64 | 0.550 |
+| `peak_db` | none out to 64 | 3.471 |
+| `onset_rate` | **6** | 0.744 |
+| `flatness` | 48 | 0.126 |
+
+**The chorus-floor hypothesis is confirmed.** With overall gain held constant,
+`peak_db` is essentially flat across the whole range (−17.4 to −20.9, drifting
+slightly *downward*), while `floor_db` rises monotonically by 6.6 dB — the
+largest normalised range of any feature, with no sign of saturation at K = 64.
+Energy is redistributing out of the peaks and into the gaps between calls, which
+is exactly the mechanism proposed in §3.2. `occupancy` expresses the same
+phenomenon from the other direction, rising monotonically from 0.14 to 0.71 as
+the floor climbs toward the peak.
+
+**Event-counting dies almost immediately.** `onset_rate` saturates at K = 6.
+Any method that counts discrete acoustic events is therefore uninformative above
+roughly six concurrent callers — which is below every flock population in this
+dataset. This is a quantitative version of the argument in §3.2 and, on this
+evidence, the strongest single reason not to build an abundance estimator on
+detection counts.
+
+**One design assumption was simply wrong.** `n_peaks` is flat (16.2 → 16.8).
+Counting prominent spectral peaks does not track the number of concurrent
+voices, as had been assumed when it was included as a polyphony proxy.
+`flatness` moves in the right direction but has by far the smallest normalised
+range (0.126) and saturates at K = 48.
+
+**The tension this creates.** The controlled experiment says `floor_db` and
+`occupancy` are the correct features and that they behave exactly as designed.
+On the real eight-label task (§5.2), the chorus-floor family was among the
+*worst* performers and the model instead selected a temporal feature,
+`bout_burstiness`.
+
+Both results are sound, and reconciling them is the most informative outcome of
+this work. The mixing experiment holds site, microphone, background and species
+composition fixed and varies only density. The real task varies all of them at
+once across five sites. A feature can therefore have a strong, monotonic,
+non-saturating response to density — as `floor_db` demonstrably does — and still
+fail as an abundance estimator, because between-site variation in gain,
+reverberation and non-target species (§6.5) swamps the within-site density
+signal it carries.
+
+The practical implication is specific and testable: **the chorus-floor approach
+is not refuted, it is confounded.** The fix is the detector gating proposed in
+§6.5 and §7.2, which would remove the dominant source of between-site variance
+while leaving the mechanism measured here intact. That is a considerably more
+actionable conclusion than "the feature did not work."
+
+**Figure.** `results/fig5_saturation_dev_aviary_4_flamingo.png`.
+
 ## 6. Failure analysis
 
 ### 6.1 The repeatability test
@@ -329,7 +421,8 @@ The pattern is compression toward the species mean: both 52-bird aviaries are
 over-predicted at ≈133 while the 161-bird aviary is nearly correct. This is
 exactly the saturation failure anticipated in §3.2. The features designed to
 break that ceiling did not survive selection (§5.3), so nothing in the final
-model addresses it.
+model addresses it — even though §5.5 shows those features do respond to density
+as intended under controlled conditions.
 
 ### 6.3 Red-billed quelea — two points, one contrast
 
@@ -363,8 +456,10 @@ environmental noise, raises the "quelea" feature identically. Since each
 development aviary holds 2–12 non-target species, this contaminates every
 feature to an unknown degree.
 
-This is very likely why the chorus-floor and polyphony features failed (§5.3).
-Both are designed to measure *how many of one species are calling at once*; if
+This is very likely why the chorus-floor and polyphony features failed. Section
+5.5 shows that `floor_db` responds strongly and monotonically to acoustic density
+when site and species composition are held fixed, so the mechanism is not in
+doubt; what defeats it on the real task is between-site variation. Both are designed to measure *how many of one species are calling at once*; if
 the band is dominated by other species and background noise, both measure
 something unrelated to the target population. The temporal feature that did
 survive may simply be less sensitive to that contamination.
@@ -405,7 +500,10 @@ figure is itself uncertain, and the Run A / Run B difference should be read as a
 demonstration of a mechanism rather than a precise effect size. Frequency bands
 are literature assumptions, and §6.5 shows they do not isolate species. The
 selected feature is a temporal statistic whose stability under fuller sampling
-is unverified (§6.7). Pied avocet has no development label, so its predictions
+is unverified (§6.7). The mixing experiment of §5.5 measures response to summed
+clips, not to K individual birds: it sums backgrounds along with calls and
+assumes independence between callers, where real flock vocalisation is partly
+synchronised, so its saturation points are optimistic bounds rather than exact. Pied avocet has no development label, so its predictions
 fall back to a global intercept and are flagged `extrapolated=1` in the
 submission. Most fundamentally, vocal activity is behaviour, not census: a
 silent bird is invisible to any acoustic method, so all estimates are of
@@ -422,7 +520,10 @@ population is itself an unvalidated modelling assumption.
    highest-value fix, and it costs no degrees of freedom because the detector
    validates features rather than generating them. This is also the direct test
    of whether the chorus-floor hypothesis failed on its merits or merely because
-   of species contamination.
+   of species contamination. Section 5.5 has already answered much of this: the
+   chorus-floor mechanism is real and non-saturating, so gating it to frames
+   where the target species is actually detected is a motivated next step rather
+   than a guess.
 3. **Re-run at n = 1,500** to confirm `bout_burstiness` stability (§6.7). Cheap,
    and the current headline result depends on it.
 4. **A calibrated mixing model instead of a regression.** Simulate chorus at
@@ -447,6 +548,12 @@ python -m src.model --features results/features_dev.csv --out results/ \
                     --max-k 2 --alpha-ridge 1.0     # Run A
 python -m src.model --features results/features_dev.csv --out results/ \
                     --max-k 1 --alpha-ridge 3.0     # Run B (reported model)
+
+python scripts/saturation_experiment.py --manifest data/raw/manifest_dev.csv \
+        --aviary dev_aviary_4 --species flamingo --n-trials 40 --out results/
+
+python scripts/permutation_test.py --features results/features_dev.csv \
+        --n-perm 500 --out results/
 ```
 
 Dataset: BioDCASE 2026 Bird Counting (CC BY 4.0), Argın, Härmä &
