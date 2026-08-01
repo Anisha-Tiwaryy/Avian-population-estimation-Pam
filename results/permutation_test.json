@@ -1,0 +1,22 @@
+{
+  "observed_mae": 45.31610910105117,
+  "baseline_mae": 59.071702994866556,
+  "n_perm": 500,
+  "max_k": 1,
+  "alpha_ridge": 3.0,
+  "n_distinct_within_species": 96,
+  "unrestricted": {
+    "p_value": 0.07984031936127745,
+    "null_mae_mean": 123.87519030425614,
+    "null_mae_median": 81.31107155648948,
+    "null_mae_p05": 37.88601144993889,
+    "n_valid": 500
+  },
+  "within_species": {
+    "p_value": 0.3852295409181637,
+    "null_mae_mean": 56.00673376525377,
+    "null_mae_median": 50.90377249995004,
+    "null_mae_p05": 31.24411470577789,
+    "n_valid": 500
+  }
+}

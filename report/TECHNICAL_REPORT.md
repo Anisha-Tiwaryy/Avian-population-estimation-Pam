@@ -6,6 +6,31 @@ Anisha Tiwary · August 2026
 
 ---
 
+## Summary of findings
+
+1. The development set provides **8 labels across 5 independent sites**, which
+   makes model capacity — not detection accuracy — the binding constraint (§2).
+2. A capacity ablation confirms this directly: a 2-feature model scores MAE
+   93.34, *worse than using no audio*, while a 1-feature model scores 45.32
+   against a 59.07 no-audio baseline (§5.1).
+3. The same ablation is visible in reproducibility. Aviaries 5 and 6 are the
+   same 52 birds recorded on different days; the 2-feature model calls them 184
+   and 313, the 1-feature model 132.6 and 133.2 (§6.1).
+4. **A permutation test cannot distinguish the 45.32 result from chance**
+   (p = 0.385 against a within-species null). This report therefore does not
+   claim the audio features carry abundance information (§5.6).
+5. A controlled experiment with manufactured ground truth shows the chorus-floor
+   mechanism is nonetheless real: with gain held constant, the in-band floor
+   rises 6.6 dB from K = 1 to K = 64 concurrent sources without saturating,
+   while the peak stays flat. Event-counting saturates at K = 6 (§5.5).
+6. The most likely reason a real mechanism fails on the real task is that band
+   energy does not isolate species — an aviary with no quelea shows higher
+   activity in the quelea band than a flamingo aviary shows in its own (§6.5).
+
+The single most useful thing this work establishes is what the development set
+*cannot* support, and what would be needed instead: more labelled sites, not
+more audio.
+
 ## 1. Problem framing
 
 The task is abundance estimation, not detection. Given a collection of
@@ -197,6 +222,11 @@ This confirms the argument of §2 directly: halving the number of free parameter
 more than halved the held-out error. Capacity, not detection quality, was the
 binding constraint.
 
+The 23% improvement over the baseline should not be read as evidence that the
+audio features work — §5.6 shows it is not distinguishable from chance. The
+ablation is nonetheless informative as a *relative* comparison, since Run A and
+Run B differ only in capacity and are evaluated identically.
+
 Selection stability tells the same story. Run A picked a different feature pair
 in every outer fold — no two folds agreed:
 
@@ -387,6 +417,79 @@ actionable conclusion than "the feature did not work."
 
 **Figure.** `results/fig5_saturation_dev_aviary_4_flamingo.png`.
 
+### 5.6 Permutation test: is the improvement distinguishable from chance?
+
+Sections 5.1–5.2 establish that the one-feature model scores MAE 45.32 against
+59.07 for a no-audio baseline. With 8 points and 20 candidate features, that
+comparison alone does not establish that the audio contributed anything. The
+relevant question is: **how often would a random assignment of counts to
+aviaries produce an improvement this large, given the same features, the same
+model, and the same selection procedure?**
+
+**Method.** The eight count labels are permuted while the feature matrix is held
+fixed, and the complete nested pipeline is re-run — including inner-loop feature
+selection, so that the selection procedure's own capacity to overfit is part of
+the null rather than excluded from it. 500 permutations per null.
+Script: `scripts/permutation_test.py`.
+
+Two nulls are tested:
+
+- **Unrestricted** — counts shuffled freely across all 8 points. This destroys
+  both the species–count and the feature–count relationships, so it largely
+  measures whether species identity matters, which is not in question.
+- **Within-species** — counts shuffled only among points of the same species.
+  Species intercepts are preserved exactly; only the pairing between features
+  and counts is broken. **This is the test that matters**, because it isolates
+  what the audio contributes over and above knowing the species name.
+
+**Results.**
+
+| Null | Null MAE mean | Null MAE median | Null 5th pct | p |
+|---|---|---|---|---|
+| Unrestricted | 123.88 | 81.31 | 37.89 | 0.0798 |
+| **Within-species** | 56.01 | 50.90 | 31.24 | **0.3852** |
+
+**The within-species null is not rejected.** An observed MAE of 45.32 sits
+below the null median of 50.90, but a random reassignment of counts within each
+species does at least as well **39% of the time**. The 23% improvement over the
+species-mean baseline is therefore *not statistically distinguishable from
+chance*, and this report does not claim that the audio features carry abundance
+information.
+
+The unrestricted null (p = 0.080) is more favourable but tests a weaker and less
+interesting hypothesis: it mostly confirms that knowing the species is useful,
+which the species intercepts already encode by construction.
+
+**How much of this is a power problem?** A substantial amount, and the arithmetic
+is worth stating. Within-species permutation preserves species membership, so
+the number of distinct label assignments is 2! × 2! × 4! = **96 in total** — two
+each for quelea and ibis, twenty-four for flamingo. The smallest p-value
+attainable by any experiment of this design on this development set is therefore
+1/96 ≈ 0.010, and the effective resolution is far coarser than that. Even a
+perfect feature would struggle to clear conventional significance here.
+
+This does not rescue the result — a null that cannot be rejected has not been
+rejected, whatever the reason. But it does identify precisely what would be
+needed to settle the question: more *sites*, not more audio. Adding another
+million clips from these six aviaries would not move this p-value at all, since
+the test operates on eight aggregate points. Roughly 15–20 independently
+labelled aviaries would give the design enough resolution to detect an effect of
+the size observed here.
+
+**What this means for the rest of the report.** The capacity ablation of §5.1
+remains valid on its own terms: Run A is reproducibly worse than Run B, and the
+aviary 5/6 repeatability result (§6.1) is a direct measurement that does not
+depend on any null hypothesis. The controlled saturation experiment of §5.5 is
+likewise unaffected, because it uses thousands of exactly-labelled synthetic
+points rather than the eight real ones. What this section rules out is the
+narrower claim that **the 45.32 figure demonstrates the audio features work**.
+It does not, and the honest summary of this work is:
+
+> A deliberately low-capacity model scores 45.32 MAE where a no-audio baseline
+> scores 59.07, but a permutation test cannot distinguish that improvement from
+> chance (p = 0.385), and the development set is too small for any experiment of
+> this design to have done so.
+
 ## 6. Failure analysis
 
 ### 6.1 The repeatability test
@@ -495,8 +598,10 @@ should be treated as provisional.
 
 ## 7. Limitations and next steps
 
-**Limitations.** Eight labels across five independent sites; every reported
-figure is itself uncertain, and the Run A / Run B difference should be read as a
+**Limitations.** The headline result is not statistically significant (§5.6,
+p = 0.385), and no experiment of this design on this development set could have
+produced a p-value below 0.010. Eight labels across five independent sites; every
+reported figure is itself uncertain, and the Run A / Run B difference should be read as a
 demonstration of a mechanism rather than a precise effect size. Frequency bands
 are literature assumptions, and §6.5 shows they do not isolate species. The
 selected feature is a temporal statistic whose stability under fuller sampling
@@ -532,7 +637,11 @@ population is itself an unvalidated modelling assumption.
    with an unlimited synthetic calibration set, turning the problem from
    statistics into physics. `scripts/smoke_test.py` already contains a crude
    version of the mixing generator.
-5. **Leave-one-species-out validation.** Fit on flamingo and quelea, predict
+5. **More labelled sites.** The binding constraint is 8 aggregate points, not
+   audio volume (§5.6). Roughly 15–20 independently labelled aviaries would give
+   this design the resolution to detect an effect of the size observed. No
+   modelling improvement substitutes for this.
+6. **Leave-one-species-out validation.** Fit on flamingo and quelea, predict
    ibis. If the pooled slope reflects real biology rather than a fitted artefact
    it should transfer across two orders of magnitude.
 
